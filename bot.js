@@ -1,4 +1,3 @@
-const { gotScraping } = require('got-scraping');
 const fs = require('fs');
 const https = require('https');
 
@@ -16,7 +15,7 @@ async function sendToDiscord(product) {
         hostname: url.hostname,
         path: url.pathname + url.search,
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Content-Length': data.length }
+        headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(data) }
     };
 
     return new Promise((resolve) => {
@@ -28,6 +27,9 @@ async function sendToDiscord(product) {
 }
 
 async function checkEmpik() {
+    // Dynamiczny import ESM dla biblioteki got-scraping w środowisku CommonJS
+    const { gotScraping } = await import('got-scraping');
+
     if (!fs.existsSync(HISTORY_FILE)) {
         fs.writeFileSync(HISTORY_FILE, JSON.stringify([], null, 2));
     }
@@ -35,7 +37,7 @@ async function checkEmpik() {
     let history = JSON.parse(fs.readFileSync(HISTORY_FILE));
 
     try {
-        console.log("Pobieram dane przez got-scraping (emulacja TLS Chrome)...");
+        console.log("Pobieram dane przez got-scraping...");
 
         const response = await gotScraping({
             url: "https://www.empik.com/szukaj/produkt?q=funko+pop",
