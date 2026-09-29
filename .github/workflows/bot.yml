@@ -1,0 +1,32 @@
+name: Empik Funko Bot
+
+on:
+  schedule:
+    - cron: '0 * * * *'
+  workflow_dispatch:
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Install dependencies
+        run: npm install puppeteer
+
+      - name: Run bot
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+        run: node bot.js
+
+      - name: Commit history
+        uses: stefanzweifel/git-auto-commit-action@v4
+        with:
+          commit_message: "Aktualizacja historii produktów"
+          file_pattern: history.json
