@@ -21,7 +21,7 @@ jobs:
           node-version: '18'
 
       - name: Install dependencies
-        run: npm install puppeteer
+        run: npm install got-scraping
 
       - name: Run bot
         env:
