@@ -29,4 +29,5 @@ jobs:
         uses: stefanzweifel/git-auto-commit-action@v4
         with:
           commit_message: "Aktualizacja historii produktów"
-          file_pattern: history.json
+          commit_user_name: "Bot History"
+          commit_user_email: "bot@example.com"
