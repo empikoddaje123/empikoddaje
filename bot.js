@@ -34,71 +34,71 @@ async function checkEmpik() {
 
     const browser = await puppeteer.launch({ 
         headless: 'new',
-        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'] 
+        args: [
+            '--no-sandbox', 
+            '--disable-setuid-sandbox', 
+            '--disable-dev-shm-usage',
+            '--disable-blink-features=AutomationControlled',
+            '--window-size=1920,1080'
+        ] 
     });
+    
     const page = await browser.newPage();
+    
+    // Usuwamy flagę webdrivera, żeby bot nie był oczywisty
+    await page.evaluateOnNewDocument(() => {
+        Object.defineProperty(navigator, 'webdriver', { get: () => false });
+    });
+
     await page.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36");
+    await page.setViewport({ width: 1920, height: 1080 });
 
     let history = JSON.parse(fs.readFileSync(HISTORY_FILE));
 
     try {
         console.log("Otwieram stronę Empiku...");
-        await page.goto("https://www.empik.com/funko-pop,10030,s", { waitUntil: "domcontentloaded", timeout: 45000 });
+        await page.goto("https://www.empik.com/funko-pop,10030,s", { waitUntil: "networkidle2", timeout: 45000 });
         
-        // Czekamy chwilę na załadowanie elementów listy
-        await new Promise(r => setTimeout(r, 5000));
+        // Dodatkowe czekanie na wyrenderowanie kontentu przez JS
+        await new Promise(r => setTimeout(r, 6000));
+
+        const pageTitle = await page.title();
+        console.log(`Tytuł załadowanej strony: ${pageTitle}`);
 
         const products = await page.evaluate(() => {
             const items = [];
-            // Szukamy kontenerów produktów na liście
-            const elements = document.querySelectorAll('div[data-product-id], li[data-product-id], .search-list-item, div.ta-prod-card');
-            
-            elements.forEach((el) => {
-                const id = el.getAttribute('data-product-id') || el.getAttribute('data-id');
-                const name = el.getAttribute('data-product-name') || el.querySelector('a.img-wrap')?.title || el.querySelector('a')?.innerText;
-                const price = el.getAttribute('data-product-price');
-                const linkEl = el.querySelector('a[href*="/p/"]');
-                const merchantId = el.getAttribute('data-merchant-id');
-
-                // Jeśli brak jawnego merchant-id, sprawdzamy tekst o sprzedawcy
-                if (id && linkEl) {
-                    items.push({ 
-                        id, 
-                        name: name ? name.trim().split('\n')[0] : 'Funko POP', 
-                        price: price ? price : 'Brak ceny', 
-                        url: linkEl.href.startsWith('http') ? linkEl.href : `https://www.empik.com${linkEl.href}` 
-                    });
-                }
-            });
-
-            // Awaryjny fallback: jeśli selektory strukturalne zawiodą, wyciągnij po samych linkach produktowych
-            if (items.length === 0) {
-                document.querySelectorAll('a[href*="/p/"]').forEach(a => {
-                    if (a.href && a.href.includes('/p/')) {
+            // Szukamy po standardowych linkach do produktów na Empiku
+            document.querySelectorAll('a[href*="/p/"]').forEach(a => {
+                const href = a.href;
+                if (href && href.includes('/p/')) {
+                    const cleanUrl = href.split('?')[0];
+                    const idMatch = cleanUrl.match(/-p([0-9a-z]+)$/i) || cleanUrl.split('/p/')[1];
+                    const id = typeof idMatch === 'string' ? idMatch : (idMatch ? idMatch[1] : cleanUrl);
+                    
+                    // Próbujemy wyciągnąć nazwę z atrybutu title lub tekstu elementu
+                    const name = a.getAttribute('title') || a.innerText;
+                    if (name && name.trim().length > 3 && !items.some(i => i.url === cleanUrl)) {
                         items.push({
-                            id: a.href.split('/p/')[1]?.split('?')[0] || a.href,
-                            name: a.title || a.innerText || 'Funko POP',
-                            price: 'Nieznana',
-                            url: a.href
+                            id: id,
+                            name: name.trim().split('\n')[0],
+                            price: 'Sprawdź na stronie',
+                            url: cleanUrl
                         });
                     }
-                });
-            }
-
+                }
+            });
             return items;
         });
 
-        // Usuwamy duplikaty po ID/URL
-        const uniqueProducts = Array.from(new Set(products.map(p => p.url)))
-            .map(url => products.find(p => p.url === url));
-
-        console.log(`Znaleziono produktów na stronie: ${uniqueProducts.length}`);
-        console.log(JSON.stringify(uniqueProducts.slice(0, 3), null, 2)); // Wypisuje pierwsze 3 sztuki w logach
+        console.log(`Znaleziono produktów na stronie: ${products.length}`);
+        if (products.length > 0) {
+            console.log(JSON.stringify(products.slice(0, 3), null, 2));
+        }
 
         await browser.close();
 
         let updated = false;
-        for (const p of uniqueProducts) {
+        for (const p of products) {
             if (!history.includes(p.id)) {
                 console.log(`Nowy produkt wykryty: ${p.name}`);
                 await sendToDiscord(p);
